@@ -17,7 +17,7 @@ wlr_allocator: *wlr.Allocator,
 output_layout: *wlr.OutputLayout,
 scene_output_layout: *wlr.SceneOutputLayout,
 new_output: wl.Listener(*wlr.Output) = .init(newOutput),
-outputs: std.ArrayList(Output) = .empty,
+outputs: std.ArrayList(*Output) = .empty,
 
 xdg_shell: *wlr.XdgShell,
 new_xdg_toplevel: wl.Listener(*wlr.XdgToplevel) = .init(newXdgToplevel),
@@ -69,6 +69,25 @@ pub fn init(self: *Compositor, gpa: std.mem.Allocator) !void {
         .cursor_mgr = try wlr.XcursorManager.create(null, 25),
     };
     try self.renderer.initServer(self.server);
+
+    self.backend.events.new_output.add(&self.new_output);
+
+    self.xdg_shell.events.new_toplevel.add(&self.new_xdg_toplevel);
+    self.xdg_shell.events.new_popup.add(&self.new_xdg_popup);
+    self.toplevels.init();
+
+    self.backend.events.new_input.add(&self.new_input);
+    self.seat.events.request_set_cursor.add(&self.request_set_cursor);
+    self.seat.events.request_set_selection.add(&self.request_set_selection);
+    self.keyboards.init();
+
+    self.cursor.attachOutputLayout(self.output_layout);
+    try self.cursor_mgr.load(1);
+    self.cursor.events.motion.add(&self.cursor_motion);
+    self.cursor.events.motion_absolute.add(&self.cursor_motion_absolute);
+    self.cursor.events.button.add(&self.cursor_button);
+    self.cursor.events.axis.add(&self.cursor_axis);
+    self.cursor.events.frame.add(&self.cursor_frame);
 
     _ = try wlr.Compositor.create(self.server, 6, self.renderer);
     _ = try wlr.Subcompositor.create(self.server);
@@ -178,7 +197,7 @@ pub fn deinit(self: *Compositor) void {
     self.cursor.destroy();
     self.seat.destroy();
     self.output_layout.destroy();
-    for (self.outputs.items) |*o| {
+    for (self.outputs.items) |o| {
         o.deinit();
     }
     self.outputs.deinit(self.gpa);

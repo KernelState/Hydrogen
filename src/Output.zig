@@ -18,7 +18,7 @@ const log = std.log.scoped(.output);
 pub fn init(
     comp: *Compositor,
     data: *wlr.Output,
-) !Output {
+) !*Output {
     if (!data.initRender(comp.wlr_allocator, comp.renderer)) {
         return error.RendererInitError;
     }
@@ -38,10 +38,17 @@ pub fn init(
     const soutput = try comp.scene.createSceneOutput(data);
     comp.scene_output_layout.addOutput(loutput, soutput);
 
-    return .{
-        .comp = comp,
+    var self = try comp.gpa.create(Output);
+    self.* = .{
         .output = data,
+        .comp = comp,
     };
+
+    data.events.frame.add(&self.frame);
+    data.events.request_state.add(&self.request_state);
+    data.events.destroy.add(&self.destroy);
+
+    return self;
 }
 
 pub fn onFrame(
@@ -88,6 +95,7 @@ pub fn deinitWithIdx(self: *Output) usize {
     self.comp.output_layout.remove(self.output);
     self.comp.scene.getSceneOutput(self.output).?.destroy();
     self.output.destroy();
+    self.comp.gpa.destroy(self);
     return idx;
 }
 
@@ -98,4 +106,5 @@ pub fn deinit(self: *Output) void {
     self.comp.output_layout.remove(self.output);
     self.comp.scene.getSceneOutput(self.output).?.destroy();
     self.output.destroy();
+    self.comp.gpa.destroy(self);
 }
