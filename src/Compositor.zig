@@ -3,6 +3,7 @@ const wl = @import("wayland").server.wl;
 const wls = @import("wayland").server;
 const wlr = @import("wlroots");
 const Toplevel = @import("Toplevel.zig");
+const Output = @import("Output.zig");
 
 gpa: std.mem.Allocator,
 
@@ -16,6 +17,7 @@ wlr_allocator: *wlr.Allocator,
 output_layout: *wlr.OutputLayout,
 scene_output_layout: *wlr.SceneOutputLayout,
 new_output: wl.Listener(*wlr.Output) = .init(newOutput),
+outputs: std.ArrayList(Output) = .empty,
 
 xdg_shell: *wlr.XdgShell,
 new_xdg_toplevel: wl.Listener(*wlr.XdgToplevel) = .init(newXdgToplevel),
@@ -76,8 +78,12 @@ pub fn init(self: *Compositor, gpa: std.mem.Allocator) !void {
 }
 
 pub fn newOutput(listener: *wl.Listener(*wlr.Output), data: *wlr.Output) void {
-    _ = listener;
-    _ = data;
+    const self: *Compositor = @fieldParentPtr("new_output", listener);
+    const o = Output.init(self, data) catch |err| {
+        log.err("Failed to create output: {any}", .{err});
+        return;
+    };
+    self.outputs.append(self.gpa, o) catch @panic("Out of memory!");
 }
 
 pub fn cursorFrame(
@@ -172,7 +178,10 @@ pub fn deinit(self: *Compositor) void {
     self.cursor.destroy();
     self.seat.destroy();
     self.output_layout.destroy();
-    // TODO: deinitialize/disconnect all outputs
+    for (self.outputs.items) |*o| {
+        o.deinit();
+    }
+    self.outputs.deinit(self.gpa);
     self.wlr_allocator.destroy();
     self.renderer.destroy();
     self.backend.destroy();
