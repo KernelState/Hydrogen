@@ -15,10 +15,10 @@ destroy: wl.Listener(*wlr.Output) = .init(onDestroy),
 const Output = @This();
 const log = std.log.scoped(.output);
 
-pub fn init(
+pub fn create(
     comp: *Compositor,
     data: *wlr.Output,
-) !*Output {
+) !void {
     if (!data.initRender(comp.wlr_allocator, comp.renderer)) {
         return error.RendererInitError;
     }
@@ -47,8 +47,6 @@ pub fn init(
     data.events.frame.add(&self.frame);
     data.events.request_state.add(&self.request_state);
     data.events.destroy.add(&self.destroy);
-
-    return self;
 }
 
 pub fn onFrame(
@@ -83,31 +81,13 @@ pub fn onDestroy(
     _: *wlr.Output,
 ) void {
     const self: *Output = @alignCast(@fieldParentPtr("destroy", listener));
-    _ = self.comp.outputs.orderedRemove(self.deinitWithIdx());
-}
-
-pub fn deinitWithIdx(self: *Output) usize {
-    var idx: usize = 0;
-    for (self.comp.outputs.items, 0..) |o, i| {
-        if (o.output == self.output)
-            idx = i;
-    }
-    self.frame.link.remove();
-    self.request_state.link.remove();
-    self.destroy.link.remove();
-    self.comp.output_layout.remove(self.output);
-    self.comp.scene.getSceneOutput(self.output).?.destroy();
-    self.output.destroy();
-    self.comp.gpa.destroy(self);
-    return idx;
+    self.deinit();
 }
 
 pub fn deinit(self: *Output) void {
     self.frame.link.remove();
     self.request_state.link.remove();
     self.destroy.link.remove();
-    self.comp.output_layout.remove(self.output);
-    self.comp.scene.getSceneOutput(self.output).?.destroy();
-    self.output.destroy();
+
     self.comp.gpa.destroy(self);
 }
