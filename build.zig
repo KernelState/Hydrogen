@@ -25,8 +25,10 @@ pub fn build(b: *std.Build) void {
     const wayland = b.createModule(.{ .root_source_file = scanner.result });
     const wlroots = b.dependency("wlroots", .{}).module("wlroots");
     const pixman = b.dependency("pixman", .{}).module("pixman");
+    const xkbcommon = b.dependency("xkbcommon", .{}).module("xkbcommon");
     wlroots.addImport("wayland", wayland);
     wlroots.addImport("pixman", pixman);
+    wlroots.addImport("xkbcommon", xkbcommon);
     wlroots.resolved_target = target;
     wlroots.linkSystemLibrary("wlroots-0.20", .{});
 
@@ -43,6 +45,7 @@ pub fn build(b: *std.Build) void {
 
     exe.root_module.addImport("wayland", wayland);
     exe.root_module.addImport("wlroots", wlroots);
+    exe.root_module.addImport("xkbcommon", xkbcommon);
 
     exe.root_module.linkSystemLibrary("wayland-server", .{});
     exe.root_module.linkSystemLibrary("xkbcommon", .{});

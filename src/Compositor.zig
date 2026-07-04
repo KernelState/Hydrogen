@@ -2,8 +2,10 @@ const std = @import("std");
 const wl = @import("wayland").server.wl;
 const wls = @import("wayland").server;
 const wlr = @import("wlroots");
+const xkb = @import("xkbcommon");
 const Toplevel = @import("Toplevel.zig");
 const Output = @import("Output.zig");
+const Keyboard = @import("Keyboard.zig");
 
 gpa: std.mem.Allocator,
 
@@ -27,7 +29,7 @@ seat: *wlr.Seat,
 new_input: wl.Listener(*wlr.InputDevice) = .init(newInput),
 request_set_cursor: wl.Listener(*wlr.Seat.event.RequestSetCursor) = .init(requestSetCursor),
 request_set_selection: wl.Listener(*wlr.Seat.event.RequestSetSelection) = .init(requestSetSelection),
-keyboards: wl.list.Head(wlr.Keyboard, .link) = undefined,
+keyboards: wl.list.Head(Keyboard, .link) = undefined,
 
 cursor: *wlr.Cursor,
 cursor_mgr: *wlr.XcursorManager,
@@ -180,9 +182,24 @@ pub fn newInput(
     const self: *Compositor = @fieldParentPtr("new_input", listener);
     switch (data.type) {
         .pointer => self.cursor.attachInputDevice(data),
+        .keyboard => Keyboard.create(self, data) catch |err| {
+            log.err("Failed to create keyboard: {any}", .{err});
+            return;
+        },
         else => {},
     }
-    self.seat.setCapabilities(.{ .pointer = true });
+    self.seat.setCapabilities(.{ .pointer = true, .keyboard = true });
+}
+
+pub fn handleKeybind(self: *Compositor, key: xkb.Keysym) bool {
+    switch (key) {
+        xkb.Keysym.Escape => self.server.terminate(),
+        else => {
+            log.warn("Unknown compositor/shell keybind {s}", .{@tagName(key)});
+            return false;
+        },
+    }
+    return true;
 }
 
 pub fn newXdgToplevel(

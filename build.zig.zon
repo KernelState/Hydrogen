@@ -44,6 +44,10 @@
             .url = "git+https://github.com/ifreund/zig-pixman.git#387f04a0289a69d159c88b5f70396ec12a8ddb00",
             .hash = "pixman-0.4.0-dev-LClMn0eVAAAlXnMK-MVBZkOG0urNdOPGVQdaGecXPM5O",
         },
+        .xkbcommon = .{
+            .url = "git+https://github.com/ifreund/zig-xkbcommon.git#6c2f41e269adde0d2cd58d20c02c4f8803d83eb1",
+            .hash = "xkbcommon-0.5.0-dev-VDqIe0y2AgA1RzA2ICMdGhaAgSXdhtRTbYybQQu7WfOa",
+        },
     },
     .paths = .{
         "build.zig",
