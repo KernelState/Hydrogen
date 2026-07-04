@@ -5,7 +5,6 @@ const wlr = @import("wlroots");
 const Toplevel = @import("Toplevel.zig");
 
 gpa: std.mem.Allocator,
-io: std.Io,
 
 display_name: [:0]const u8,
 server: *wl.Server,
@@ -46,12 +45,11 @@ resize_edges: wlr.Edges = .{},
 
 const Compositor = @This();
 
-pub fn init(self: *Compositor, gpa: std.mem.Allocator, io: std.Io) !void {
+pub fn init(self: *Compositor, gpa: std.mem.Allocator) !void {
     const loop = self.server.getEventLoop();
     self.* = .{
         .display_name = undefined,
         .gpa = gpa,
-        .io = io,
         .server = try .create(),
         .backend = try wlr.Backend.autocreate(loop, null),
         .renderer = try wlr.Renderer.autocreate(self.backend),
@@ -60,10 +58,10 @@ pub fn init(self: *Compositor, gpa: std.mem.Allocator, io: std.Io) !void {
         .output_layout = try wlr.OutputLayout.create(self.server),
         .scene_output_layout = try self.scene.attachOutputLayout(self.output_layout),
 
-        .xdg_shell = try wlr.XdgShell.create(self.Server, 2),
-        .seat = wlr.Seat.create(self.server, "default"),
-        .cursor = wlr.Cursor.create(),
-        .cursor_mgr = wlr.XcursorManager.create(null, 24),
+        .xdg_shell = try wlr.XdgShell.create(self.server, 2),
+        .seat = try wlr.Seat.create(self.server, "default"),
+        .cursor = try wlr.Cursor.create(),
+        .cursor_mgr = try wlr.XcursorManager.create(null, 25),
     };
     try self.renderer.initServer(self.server);
 

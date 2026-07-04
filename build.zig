@@ -24,7 +24,9 @@ pub fn build(b: *std.Build) void {
 
     const wayland = b.createModule(.{ .root_source_file = scanner.result });
     const wlroots = b.dependency("wlroots", .{}).module("wlroots");
+    const pixman = b.dependency("pixman", .{}).module("pixman");
     wlroots.addImport("wayland", wayland);
+    wlroots.addImport("pixman", pixman);
     wlroots.resolved_target = target;
     wlroots.linkSystemLibrary("wlroots-0.20", .{});
 
