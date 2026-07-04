@@ -107,42 +107,55 @@ pub fn newOutput(listener: *wl.Listener(*wlr.Output), data: *wlr.Output) void {
 
 pub fn cursorFrame(
     listener: *wl.Listener(*wlr.Cursor),
-    data: *wlr.Cursor,
+    _: *wlr.Cursor,
 ) void {
-    _ = listener;
-    _ = data;
+    const self: *Compositor = @fieldParentPtr("cursor_frame", listener);
+    self.seat.pointerNotifyFrame();
 }
 
 pub fn cursorAxis(
     listener: *wl.Listener(*wlr.Pointer.event.Axis),
-    data: *wlr.Pointer.event.Axis,
+    event: *wlr.Pointer.event.Axis,
 ) void {
-    _ = listener;
-    _ = data;
+    const self: *Compositor = @fieldParentPtr("cursor_axis", listener);
+    self.seat.pointerNotifyAxis(
+        event.time_msec,
+        event.orientation,
+        event.delta,
+        event.delta_discrete,
+        event.source,
+        event.relative_direction,
+    );
 }
 
 pub fn cursorButton(
     listener: *wl.Listener(*wlr.Pointer.event.Button),
-    data: *wlr.Pointer.event.Button,
+    event: *wlr.Pointer.event.Button,
 ) void {
-    _ = listener;
-    _ = data;
+    const self: *Compositor = @fieldParentPtr("cursor_button", listener);
+    _ = self.seat.pointerNotifyButton(
+        event.time_msec,
+        event.button,
+        event.state,
+    );
+    if (event.state == .released)
+        self.cursor_mode = .passthrough;
 }
 
 pub fn cursorMotion(
     listener: *wl.Listener(*wlr.Pointer.event.Motion),
-    data: *wlr.Pointer.event.Motion,
+    event: *wlr.Pointer.event.Motion,
 ) void {
-    _ = listener;
-    _ = data;
+    const self: *Compositor = @fieldParentPtr("cursor_motion", listener);
+    self.cursor.move(event.device, event.delta_x, event.delta_y);
 }
 
 pub fn cursorMotionAbsolute(
     listener: *wl.Listener(*wlr.Pointer.event.MotionAbsolute),
-    data: *wlr.Pointer.event.MotionAbsolute,
+    event: *wlr.Pointer.event.MotionAbsolute,
 ) void {
-    _ = listener;
-    _ = data;
+    const self: *Compositor = @fieldParentPtr("cursor_motion_absolute", listener);
+    self.cursor.warpAbsolute(event.device, event.x, event.y);
 }
 
 pub fn requestSetSelection(
