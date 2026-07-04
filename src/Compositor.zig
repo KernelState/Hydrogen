@@ -45,6 +45,8 @@ resize_edges: wlr.Edges = .{},
 
 const Compositor = @This();
 
+const log = std.log.scoped(.compositor);
+
 pub fn init(self: *Compositor, gpa: std.mem.Allocator) !void {
     const server = try wl.Server.create();
     const loop = server.getEventLoop();
@@ -69,6 +71,8 @@ pub fn init(self: *Compositor, gpa: std.mem.Allocator) !void {
     _ = try wlr.Compositor.create(self.server, 6, self.renderer);
     _ = try wlr.Subcompositor.create(self.server);
     _ = try wlr.DataDeviceManager.create(self.server);
+
+    log.info("server initialized successfully", .{});
 }
 
 pub fn newOutput(listener: *wl.Listener(*wlr.Output), data: *wlr.Output) void {
@@ -156,7 +160,6 @@ pub fn newXdgPopup(
     _ = data;
 }
 
-// TODO: make it at least walk, this aint moving an inch
 pub fn run(self: *Compositor) !void {
     var buf: [11]u8 = undefined;
     self.display_name = try self.server.addSocketAuto(&buf);
