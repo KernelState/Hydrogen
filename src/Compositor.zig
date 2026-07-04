@@ -46,11 +46,12 @@ resize_edges: wlr.Edges = .{},
 const Compositor = @This();
 
 pub fn init(self: *Compositor, gpa: std.mem.Allocator) !void {
-    const loop = self.server.getEventLoop();
+    const server = try wl.Server.create();
+    const loop = server.getEventLoop();
     self.* = .{
         .display_name = undefined,
         .gpa = gpa,
-        .server = try .create(),
+        .server = server,
         .backend = try wlr.Backend.autocreate(loop, null),
         .renderer = try wlr.Renderer.autocreate(self.backend),
         .wlr_allocator = try wlr.Allocator.autocreate(self.backend, self.renderer),
