@@ -92,6 +92,7 @@ pub fn init(self: *Compositor, gpa: std.mem.Allocator) !void {
     _ = try wlr.Compositor.create(self.server, 6, self.renderer);
     _ = try wlr.Subcompositor.create(self.server);
     _ = try wlr.DataDeviceManager.create(self.server);
+    self.cursor.setXcursor(self.cursor_mgr, "left_ptr");
 
     log.info("server initialized successfully", .{});
 }
@@ -178,8 +179,12 @@ pub fn newInput(
     listener: *wl.Listener(*wlr.InputDevice),
     data: *wlr.InputDevice,
 ) void {
-    _ = listener;
-    _ = data;
+    const self: *Compositor = @fieldParentPtr("new_input", listener);
+    switch (data.type) {
+        .pointer => self.cursor.attachInputDevice(data),
+        else => {},
+    }
+    self.seat.setCapabilities(.{ .pointer = true });
 }
 
 pub fn newXdgToplevel(

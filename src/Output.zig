@@ -61,7 +61,10 @@ pub fn onFrame(
         return;
     };
     _ = so.commit(null);
-    if (std.posix.system.clock_gettime(std.posix.CLOCK.MONOTONIC, &self.last_frame_time,) != 0) {
+    if (std.posix.system.clock_gettime(
+        std.posix.CLOCK.MONOTONIC,
+        &self.last_frame_time,
+    ) != 0) {
         log.err("CLOCK_MONOTONIC is unsupported by kernel", .{});
     }
     so.sendFrameDone(&self.last_frame_time);
