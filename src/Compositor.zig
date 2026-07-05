@@ -195,7 +195,7 @@ pub fn handleKeybind(self: *Compositor, key: xkb.Keysym) bool {
     switch (key) {
         xkb.Keysym.Escape => self.server.terminate(),
         else => {
-            log.warn("Unknown compositor/shell keybind {s}", .{@tagName(key)});
+            log.warn("Unknown compositor/shell keybind {}", .{@intFromEnum(key)});
             return false;
         },
     }
@@ -226,13 +226,21 @@ pub fn run(self: *Compositor) !void {
 }
 
 pub fn deinit(self: *Compositor) void {
-    self.cursor_mgr.destroy();
-    self.cursor.destroy();
-    self.seat.destroy();
-    self.output_layout.destroy();
-    self.wlr_allocator.destroy();
-    self.renderer.destroy();
-    self.backend.destroy();
+    log.info("Exiting Compositor", .{});
     self.server.destroyClients();
+
+    self.cursor_motion.link.remove();
+    self.cursor_motion_absolute.link.remove();
+    self.cursor_button.link.remove();
+    self.cursor_axis.link.remove();
+    self.cursor_frame.link.remove();
+    self.new_input.link.remove();
+    self.new_output.link.remove();
+    self.new_xdg_popup.link.remove();
+    self.new_xdg_toplevel.link.remove();
+    self.request_set_cursor.link.remove();
+    self.request_set_selection.link.remove();
+
+    self.backend.destroy();
     self.server.destroy();
 }
