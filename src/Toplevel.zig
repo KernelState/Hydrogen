@@ -105,6 +105,7 @@ pub fn onRequestResize(
         .x = self.x,
         .y = self.y
     };
+    log.debug("{any}", .{event.edges});
 }
 
 pub fn syncResize(self: *Toplevel) void {
@@ -124,8 +125,8 @@ pub fn syncResize(self: *Toplevel) void {
     }
 
     if (ev.edges.bottom) {
-        dw = c.y-self.comp.grab_y;
-    } else {
+        dh = c.y-self.comp.grab_y;
+    } else if (ev.edges.top){
         dh = self.comp.grab_y-c.y;
         self.y = box.y-@as(i32, @intFromFloat(self.comp.grab_y-c.y));
     }

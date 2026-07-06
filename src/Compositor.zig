@@ -183,7 +183,7 @@ pub fn postProcessPointerMotion(self: *Compositor, msec: u32) void {
         },
         .resize => {
             self.grabbed_view.?.syncResize();
-        }
+        },
     }
 }
 
@@ -295,6 +295,11 @@ pub fn focusView(self: *Compositor, view_: ?*Toplevel) void {
             view.toplevel.base.surface,
             keyboard.keycodes[0..keyboard.num_keycodes],
             &keyboard.modifiers,
+        );
+        self.seat.pointerNotifyEnter(
+            view.toplevel.base.surface,
+            self.cursor.x,
+            self.cursor.y,
         );
         log.info("Focused window {s}", .{if (view.toplevel.title) |t| t else "Unknown"});
         return;
