@@ -98,54 +98,41 @@ pub fn onRequestResize(
     self.comp.grab_event = .{ .resize = event.* };
     self.comp.grab_x = self.comp.cursor.x;
     self.comp.grab_y = self.comp.cursor.y;
-    self.syncResize();
+    const box = self.toplevel.base.geometry;
+    self.comp.grab_box = .{
+        .width = box.width,
+        .height = box.height,
+        .x = self.x,
+        .y = self.y
+    };
 }
 
 pub fn syncResize(self: *Toplevel) void {
-    log.info("Requested resize", .{});
-    const box = self.toplevel.base.geometry;
-    const event = self.comp.grab_event.?.resize;
+    const ev = self.comp.grab_event.?.resize;
+    const c = self.comp.cursor;
+    const box = self.comp.grab_box;
+    const w = box.width;
+    const h = box.height;
+    var dw: f64 = 0.0;
+    var dh: f64 = 0.0;
 
-    const border_x = self.x + box.x + if (event.edges.right) box.width else 0;
-    const border_y = self.y + box.y + if (event.edges.bottom) box.height else 0;
-
-    self.comp.grab_x = self.comp.cursor.x - @as(f64, @floatFromInt(border_x));
-    self.comp.grab_y = self.comp.cursor.y - @as(f64, @floatFromInt(border_y));
-    self.comp.grab_box = box;
-    self.comp.grab_box.x += self.x;
-    self.comp.grab_box.y += self.y;
-
-    var new_left = self.comp.grab_box.x;
-    var new_right = self.comp.grab_box.x + self.comp.grab_box.width;
-    var new_top = self.comp.grab_box.y;
-    var new_bottom = self.comp.grab_box.y + self.comp.grab_box.height;
-
-    if (self.comp.resize_edges.top) {
-        new_top = border_y;
-        if (new_top >= new_bottom)
-            new_top = new_bottom - 1;
-    } else if (self.comp.resize_edges.bottom) {
-        new_bottom = border_y;
-        if (new_bottom <= new_top)
-            new_bottom = new_top + 1;
+    if (ev.edges.right) {
+        dw = c.x-self.comp.grab_x;
+    } else if (ev.edges.left) {
+        dw = self.comp.grab_x-c.x;
+        self.x = box.x-@as(i32, @intFromFloat(self.comp.grab_x-c.x));
     }
 
-    if (self.comp.resize_edges.left) {
-        new_left = border_x;
-        if (new_left >= new_right)
-            new_left = new_right - 1;
-    } else if (self.comp.resize_edges.right) {
-        new_right = border_x;
-        if (new_right <= new_left)
-            new_right = new_left + 1;
+    if (ev.edges.bottom) {
+        dw = c.y-self.comp.grab_y;
+    } else {
+        dh = self.comp.grab_y-c.y;
+        self.y = box.y-@as(i32, @intFromFloat(self.comp.grab_y-c.y));
     }
 
-    self.x = new_left - self.toplevel.base.geometry.x;
-    self.y = new_top - self.toplevel.base.geometry.y;
+    const new_width = @as(i32, @intFromFloat(@max(w+dw, 1)));
+    const new_height = @as(i32, @intFromFloat(@max(h+dh, 1.0)));
     self.scene_tree.node.setPosition(self.x, self.y);
-
-    const new_width = new_right - new_left;
-    const new_height = new_bottom - new_top;
     _ = self.toplevel.setSize(new_width, new_height);
 }
 
