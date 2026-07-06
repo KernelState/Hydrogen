@@ -7,8 +7,10 @@ const Toplevel = @import("Toplevel.zig");
 const Output = @import("Output.zig");
 const Keyboard = @import("Keyboard.zig");
 const Popup = @import("Popup.zig");
+const Shell = @import("Shell.zig");
 
 gpa: std.mem.Allocator,
+io: std.Io,
 
 display_name: [:0]const u8,
 server: *wl.Server,
@@ -25,6 +27,7 @@ xdg_shell: *wlr.XdgShell,
 new_xdg_toplevel: wl.Listener(*wlr.XdgToplevel) = .init(newXdgToplevel),
 new_xdg_popup: wl.Listener(*wlr.XdgPopup) = .init(newXdgPopup),
 toplevels: wl.list.Head(Toplevel, .link) = undefined,
+shell: Shell = undefined,
 
 seat: *wlr.Seat,
 new_input: wl.Listener(*wlr.InputDevice) = .init(newInput),
@@ -57,12 +60,13 @@ pub const GrabEvent = union(enum) {
     resize: wlr.XdgToplevel.event.Resize,
 };
 
-pub fn init(self: *Compositor, gpa: std.mem.Allocator) !void {
+pub fn init(self: *Compositor, gpa: std.mem.Allocator, io: std.Io) !void {
     const server = try wl.Server.create();
     const loop = server.getEventLoop();
     self.* = .{
         .display_name = undefined,
         .gpa = gpa,
+        .io = io,
         .server = server,
         .backend = try wlr.Backend.autocreate(loop, null),
         .renderer = try wlr.Renderer.autocreate(self.backend),
@@ -96,6 +100,8 @@ pub fn init(self: *Compositor, gpa: std.mem.Allocator) !void {
     self.cursor.events.button.add(&self.cursor_button);
     self.cursor.events.axis.add(&self.cursor_axis);
     self.cursor.events.frame.add(&self.cursor_frame);
+
+    self.shell = try Shell.create(self);
 
     _ = try wlr.Compositor.create(self.server, 6, self.renderer);
     _ = try wlr.Subcompositor.create(self.server);
@@ -344,5 +350,6 @@ pub fn deinit(self: *Compositor) void {
     self.request_set_selection.link.remove();
 
     self.backend.destroy();
+    self.shell.destroy();
     self.server.destroy();
 }
