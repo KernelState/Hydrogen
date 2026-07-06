@@ -131,8 +131,10 @@ pub fn syncResize(self: *Toplevel) void {
         self.y = box.y-@as(i32, @intFromFloat(self.comp.grab_y-c.y));
     }
 
-    const new_width = @as(i32, @intFromFloat(@max(w+dw, 1)));
-    const new_height = @as(i32, @intFromFloat(@max(h+dh, 1.0)));
+    const mw = self.toplevel.current.min_width;
+    const mh = self.toplevel.current.min_height;
+    const new_width = @as(i32, @intFromFloat(@max(w+dw, mw)));
+    const new_height = @as(i32, @intFromFloat(@max(h+dh, mh)));
     self.scene_tree.node.setPosition(self.x, self.y);
     _ = self.toplevel.setSize(new_width, new_height);
 }
