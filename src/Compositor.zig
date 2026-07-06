@@ -6,6 +6,7 @@ const xkb = @import("xkbcommon");
 const Toplevel = @import("Toplevel.zig");
 const Output = @import("Output.zig");
 const Keyboard = @import("Keyboard.zig");
+const Popup = @import("Popup.zig");
 
 gpa: std.mem.Allocator,
 
@@ -311,8 +312,11 @@ pub fn newXdgPopup(
     listener: *wl.Listener(*wlr.XdgPopup),
     data: *wlr.XdgPopup,
 ) void {
-    _ = listener;
-    _ = data;
+    const self: *Compositor = @fieldParentPtr("new_xdg_popup", listener);
+    Popup.create(self, data) catch |err| {
+        log.err("Failed to create Popup: {any}", .{err});
+        return;
+    };
 }
 
 pub fn run(self: *Compositor) !void {
