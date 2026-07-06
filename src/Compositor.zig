@@ -41,6 +41,7 @@ cursor_frame: wl.Listener(*wlr.Cursor) = .init(cursorFrame),
 
 cursor_mode: enum { passthrough, move, resize } = .passthrough,
 grabbed_view: ?*Toplevel = null,
+grab_event: ?GrabEvent = null,
 grab_x: f64 = 0,
 grab_y: f64 = 0,
 grab_box: wlr.Box = undefined,
@@ -48,7 +49,12 @@ resize_edges: wlr.Edges = .{},
 
 const Compositor = @This();
 
-const log = std.log.scoped(.compositor);
+pub const log = std.log.scoped(.compositor);
+
+pub const GrabEvent = union(enum) {
+    move: wlr.XdgToplevel.event.Move,
+    resize: wlr.XdgToplevel.event.Resize,
+};
 
 pub fn init(self: *Compositor, gpa: std.mem.Allocator) !void {
     const server = try wl.Server.create();
@@ -137,7 +143,7 @@ pub fn cursorButton(
     if (event.state == .released) {
         self.cursor_mode = .passthrough;
     } else if (self.viewAt(self.cursor.x, self.cursor.y)) |t| {
-        self.focusView(t);
+        self.focusView(t.toplevel);
     }
     _ = self.seat.pointerNotifyButton(
         event.time_msec,
@@ -152,7 +158,7 @@ pub fn cursorMotion(
 ) void {
     const self: *Compositor = @fieldParentPtr("cursor_motion", listener);
     self.cursor.move(event.device, event.delta_x, event.delta_y);
-    self.seat.pointerNotifyMotion(event.time_msec, self.cursor.x, self.cursor.y);
+    self.postProcessPointerMotion(event.time_msec);
 }
 
 pub fn cursorMotionAbsolute(
@@ -161,7 +167,24 @@ pub fn cursorMotionAbsolute(
 ) void {
     const self: *Compositor = @fieldParentPtr("cursor_motion_absolute", listener);
     self.cursor.warpAbsolute(event.device, event.x, event.y);
-    self.seat.pointerNotifyMotion(event.time_msec, self.cursor.x, self.cursor.y);
+    self.postProcessPointerMotion(event.time_msec);
+}
+
+pub fn postProcessPointerMotion(self: *Compositor, msec: u32) void {
+    switch (self.cursor_mode) {
+        .passthrough => {
+            if (self.viewAt(self.cursor.x, self.cursor.y)) |res| {
+                self.seat.pointerNotifyMotion(msec, res.sx, res.sy);
+                self.seat.pointerNotifyEnter(res.surface.surface, res.sx, res.sy);
+            }
+        },
+        .move => {
+            self.grabbed_view.?.syncMove();
+        },
+        .resize => {
+            self.grabbed_view.?.syncResize();
+        }
+    }
 }
 
 pub fn requestSetSelection(
@@ -219,7 +242,13 @@ pub fn newXdgToplevel(
     };
 }
 
-pub fn viewAt(self: *Compositor, lx: f64, ly: f64) ?*Toplevel {
+const ViewAtResult = struct {
+    sx: f64,
+    sy: f64,
+    toplevel: *Toplevel,
+    surface: *wlr.SceneSurface,
+};
+pub fn viewAt(self: *Compositor, lx: f64, ly: f64) ?ViewAtResult {
     var sx: f64 = undefined;
     var sy: f64 = undefined;
     if (self.scene.tree.node.at(lx, ly, &sx, &sy)) |n| {
@@ -228,44 +257,49 @@ pub fn viewAt(self: *Compositor, lx: f64, ly: f64) ?*Toplevel {
         var it: ?*wlr.SceneTree = n.parent;
         while (it) |p| : (it = p.node.parent) {
             if (@as(?*Toplevel, @ptrCast(@alignCast(p.node.data)))) |toplevel| {
-                return toplevel;
+                const buffer = wlr.SceneBuffer.fromNode(n);
+                const surface = wlr.SceneSurface.tryFromBuffer(buffer) orelse return null;
+                return .{
+                    .sx = sx,
+                    .sy = sy,
+                    .toplevel = toplevel,
+                    .surface = surface,
+                };
             }
         }
     }
     return null;
 }
 
-pub fn focusView(self: *Compositor, view: *Toplevel) void {
-    log.info("focusing view", .{});
+pub fn focusView(self: *Compositor, view_: ?*Toplevel) void {
     self.seat.keyboardNotifyClearFocus();
-    self.seat.pointerNotifyClearFocus();
-    if (self.seat.keyboard_state.focused_surface) |p| {
-        if (p == view.toplevel.base.surface) return;
-        if (wlr.XdgSurface.tryFromWlrSurface(p)) |xs| {
-            _ = xs.role_data.toplevel.?.setActivated(false);
+    if (view_) |view| {
+        log.info("focusing view", .{});
+        if (self.seat.keyboard_state.focused_surface) |p| {
+            if (p == view.toplevel.base.surface) return;
+            if (wlr.XdgSurface.tryFromWlrSurface(p)) |xs| {
+                _ = xs.role_data.toplevel.?.setActivated(false);
+            }
         }
+        view.scene_tree.node.raiseToTop();
+        view.link.remove();
+        self.toplevels.prepend(view);
+
+        _ = view.toplevel.setActivated(true);
+
+        //const scene_buffer = wlr.SceneBuffer.fromNode(&view.scene_tree.node);
+        //const scene_surface = wlr.SceneSurface.tryFromBuffer(scene_buffer) orelse return;
+
+        const keyboard = self.seat.getKeyboard() orelse return;
+        self.seat.keyboardNotifyEnter(
+            view.toplevel.base.surface,
+            keyboard.keycodes[0..keyboard.num_keycodes],
+            &keyboard.modifiers,
+        );
+        log.info("Focused window {s}", .{if (view.toplevel.title) |t| t else "Unknown"});
+        return;
     }
-    view.scene_tree.node.raiseToTop();
-    view.link.remove();
-    self.toplevels.prepend(view);
-
-    _ = view.toplevel.setActivated(true);
-
-    //const scene_buffer = wlr.SceneBuffer.fromNode(&view.scene_tree.node);
-    //const scene_surface = wlr.SceneSurface.tryFromBuffer(scene_buffer) orelse return;
-
-    const keyboard = self.seat.getKeyboard() orelse return;
-    self.seat.keyboardNotifyEnter(
-        view.toplevel.base.surface,
-        keyboard.keycodes[0..keyboard.num_keycodes],
-        &keyboard.modifiers,
-    );
-    self.seat.pointerNotifyEnter(
-        view.toplevel.base.surface,
-        self.cursor.x,
-        self.cursor.y,
-    );
-    log.info("Focused window {s}", .{if (view.toplevel.title) |t| t else "Unknown"});
+    log.info("Focused shell", .{});
 }
 
 pub fn newXdgPopup(
