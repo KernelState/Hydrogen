@@ -135,12 +135,16 @@ pub fn syncResize(self: *Toplevel) void {
     const mh = self.toplevel.current.min_height;
     const new_width = @as(i32, @intFromFloat(@max(w+dw, mw)));
     const new_height = @as(i32, @intFromFloat(@max(h+dh, mh)));
-    self.scene_tree.node.setPosition(self.x, self.y);
+    self.commit();
     _ = self.toplevel.setSize(new_width, new_height);
 }
 
 pub fn syncMove(self: *Toplevel) void {
     self.x = @as(i32, @intFromFloat(self.comp.cursor.x - self.comp.grab_x));
     self.y = @as(i32, @intFromFloat(self.comp.cursor.y - self.comp.grab_y));
+    self.commit();
+}
+
+pub fn commit(self: *Toplevel) void {
     self.scene_tree.node.setPosition(self.x, self.y);
 }
