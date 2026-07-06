@@ -206,8 +206,33 @@ pub fn newXdgToplevel(
     listener: *wl.Listener(*wlr.XdgToplevel),
     data: *wlr.XdgToplevel,
 ) void {
-    _ = listener;
-    _ = data;
+    const self: *Compositor = @fieldParentPtr("new_xdg_toplevel", listener);
+
+    Toplevel.create(self, data) catch |err| {
+        log.err("Failed to create toplevel: {any}", .{err});
+        return;
+    };
+}
+
+pub fn focusView(self: *Compositor, view: *Toplevel) void {
+    if (self.seat.keyboard_state.focused_surface) |p| {
+        if (p == view.toplevel.base.surface) return;
+        if (wlr.XdgSurface.tryFromWlrSurface(p)) |xs| {
+            _ = xs.role_data.toplevel.?.setActivated(false);
+        }
+    }
+    view.scene_tree.node.raiseToTop();
+    view.link.remove();
+    self.toplevels.prepend(view);
+
+    _ = view.toplevel.setActivated(true);
+
+    const keyboard = self.seat.getKeyboard() orelse return;
+    self.seat.keyboardNotifyEnter(
+        view.toplevel.base.surface,
+        keyboard.keycodes[0..keyboard.num_keycodes],
+        &keyboard.modifiers,
+    );
 }
 
 pub fn newXdgPopup(
