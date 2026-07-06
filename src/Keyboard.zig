@@ -50,23 +50,20 @@ pub fn onKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboa
     const keyboard = self.device.toKeyboard();
 
     const keycode = event.keycode + 8;
-    var handled = false;
     const shell_mod =
         (keyboard.getModifiers().alt and @import("builtin").mode == .Debug)
         or keyboard.getModifiers().logo;
     if (shell_mod and event.state == .pressed) {
         for (keyboard.xkb_state.?.keyGetSyms(keycode)) |sym| {
             if (self.comp.handleKeybind(sym)) {
-                handled = true;
                 break;
             }
         }
+        return;
     }
 
-    if (!handled) {
-        self.comp.seat.setKeyboard(keyboard);
-        self.comp.seat.keyboardNotifyKey(event.time_msec, event.keycode, event.state);
-    }
+    self.comp.seat.setKeyboard(keyboard);
+    self.comp.seat.keyboardNotifyKey(event.time_msec, event.keycode, event.state);
 }
 
 pub fn onDestroy(listener: *wl.Listener(*wlr.InputDevice), _: *wlr.InputDevice) void {

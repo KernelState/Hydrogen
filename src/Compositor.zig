@@ -134,13 +134,16 @@ pub fn cursorButton(
     event: *wlr.Pointer.event.Button,
 ) void {
     const self: *Compositor = @fieldParentPtr("cursor_button", listener);
+    if (event.state == .released) {
+        self.cursor_mode = .passthrough;
+    } else if (self.viewAt(self.cursor.x, self.cursor.y)) |t| {
+        self.focusView(t);
+    }
     _ = self.seat.pointerNotifyButton(
         event.time_msec,
         event.button,
         event.state,
     );
-    if (event.state == .released)
-        self.cursor_mode = .passthrough;
 }
 
 pub fn cursorMotion(
@@ -149,6 +152,7 @@ pub fn cursorMotion(
 ) void {
     const self: *Compositor = @fieldParentPtr("cursor_motion", listener);
     self.cursor.move(event.device, event.delta_x, event.delta_y);
+    self.seat.pointerNotifyMotion(event.time_msec, self.cursor.x, self.cursor.y);
 }
 
 pub fn cursorMotionAbsolute(
@@ -157,6 +161,7 @@ pub fn cursorMotionAbsolute(
 ) void {
     const self: *Compositor = @fieldParentPtr("cursor_motion_absolute", listener);
     self.cursor.warpAbsolute(event.device, event.x, event.y);
+    self.seat.pointerNotifyMotion(event.time_msec, self.cursor.x, self.cursor.y);
 }
 
 pub fn requestSetSelection(
@@ -214,7 +219,26 @@ pub fn newXdgToplevel(
     };
 }
 
+pub fn viewAt(self: *Compositor, lx: f64, ly: f64) ?*Toplevel {
+    var sx: f64 = undefined;
+    var sy: f64 = undefined;
+    if (self.scene.tree.node.at(lx, ly, &sx, &sy)) |n| {
+        if (n.type != .buffer) return null;
+
+        var it: ?*wlr.SceneTree = n.parent;
+        while (it) |p| : (it = p.node.parent) {
+            if (@as(?*Toplevel, @ptrCast(@alignCast(p.node.data)))) |toplevel| {
+                return toplevel;
+            }
+        }
+    }
+    return null;
+}
+
 pub fn focusView(self: *Compositor, view: *Toplevel) void {
+    log.info("focusing view", .{});
+    self.seat.keyboardNotifyClearFocus();
+    self.seat.pointerNotifyClearFocus();
     if (self.seat.keyboard_state.focused_surface) |p| {
         if (p == view.toplevel.base.surface) return;
         if (wlr.XdgSurface.tryFromWlrSurface(p)) |xs| {
@@ -227,12 +251,21 @@ pub fn focusView(self: *Compositor, view: *Toplevel) void {
 
     _ = view.toplevel.setActivated(true);
 
+    //const scene_buffer = wlr.SceneBuffer.fromNode(&view.scene_tree.node);
+    //const scene_surface = wlr.SceneSurface.tryFromBuffer(scene_buffer) orelse return;
+
     const keyboard = self.seat.getKeyboard() orelse return;
     self.seat.keyboardNotifyEnter(
         view.toplevel.base.surface,
         keyboard.keycodes[0..keyboard.num_keycodes],
         &keyboard.modifiers,
     );
+    self.seat.pointerNotifyEnter(
+        view.toplevel.base.surface,
+        self.cursor.x,
+        self.cursor.y,
+    );
+    log.info("Focused window {s}", .{if (view.toplevel.title) |t| t else "Unknown"});
 }
 
 pub fn newXdgPopup(
@@ -246,6 +279,7 @@ pub fn newXdgPopup(
 pub fn run(self: *Compositor) !void {
     var buf: [11]u8 = undefined;
     self.display_name = try self.server.addSocketAuto(&buf);
+    log.info("Running on display: {s}", .{self.display_name});
     try self.backend.start();
     self.server.run();
 }
