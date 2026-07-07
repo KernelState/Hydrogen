@@ -8,6 +8,7 @@ const Output = @import("Output.zig");
 const Keyboard = @import("Keyboard.zig");
 const Popup = @import("Popup.zig");
 const Shell = @import("Shell.zig");
+const LayoutMgr = @import("LayoutMgr.zig");
 
 gpa: std.mem.Allocator,
 io: std.Io,
@@ -28,6 +29,7 @@ new_xdg_toplevel: wl.Listener(*wlr.XdgToplevel) = .init(newXdgToplevel),
 new_xdg_popup: wl.Listener(*wlr.XdgPopup) = .init(newXdgPopup),
 toplevels: wl.list.Head(Toplevel, .link) = undefined,
 shell: Shell = undefined,
+layout_mgr: LayoutMgr = undefined,
 
 seat: *wlr.Seat,
 new_input: wl.Listener(*wlr.InputDevice) = .init(newInput),
@@ -102,6 +104,14 @@ pub fn init(self: *Compositor, gpa: std.mem.Allocator, io: std.Io) !void {
     self.cursor.events.frame.add(&self.cursor_frame);
 
     self.shell = try Shell.create(self);
+    self.layout_mgr = LayoutMgr.create(self);
+    self.layout_mgr.initWorkspaces();
+    self.layout_mgr.ex_zone.append(gpa, .{
+        .anchor_top = true,
+        .anchor_left = true,
+        .anchor_right = true,
+        .size = 52,
+    }) catch @panic("OOM");
 
     _ = try wlr.Compositor.create(self.server, 6, self.renderer);
     _ = try wlr.Subcompositor.create(self.server);
@@ -113,7 +123,7 @@ pub fn init(self: *Compositor, gpa: std.mem.Allocator, io: std.Io) !void {
 
 pub fn newOutput(listener: *wl.Listener(*wlr.Output), data: *wlr.Output) void {
     const self: *Compositor = @fieldParentPtr("new_output", listener);
-    Output.create(self, data) catch |err| {
+    _ = Output.create(self, data) catch |err| {
         log.err("Failed to create output: {any}", .{err});
         return;
     };
@@ -148,7 +158,13 @@ pub fn cursorButton(
 ) void {
     const self: *Compositor = @fieldParentPtr("cursor_button", listener);
     if (event.state == .released) {
+        if (self.cursor_mode == .move) {
+            if (self.grabbed_view) |v| {
+                self.layout_mgr.snapWindow(v);
+            }
+        }
         self.cursor_mode = .passthrough;
+        self.grabbed_view = null;
     } else if (self.viewAt(self.cursor.x, self.cursor.y)) |t| {
         self.focusView(t.toplevel);
     }
@@ -229,12 +245,23 @@ pub fn newInput(
 pub fn handleKeybind(self: *Compositor, key: xkb.Keysym) bool {
     switch (key) {
         xkb.Keysym.Escape => self.server.terminate(),
+        xkb.Keysym.space => {
+            self.layout_mgr.cycleMode();
+            return true;
+        },
+        xkb.Keysym.@"1", xkb.Keysym.@"2", xkb.Keysym.@"3",
+        xkb.Keysym.@"4", xkb.Keysym.@"5", xkb.Keysym.@"6",
+        xkb.Keysym.@"7", xkb.Keysym.@"8", xkb.Keysym.@"9",
+        => {
+            const num = @as(usize, @intCast(@intFromEnum(key) - @intFromEnum(xkb.Keysym.@"1")));
+            self.layout_mgr.switchWorkspace(num);
+            return true;
+        },
         else => {
             log.warn("Unknown compositor/shell keybind {}", .{@intFromEnum(key)});
-            return false;
         },
     }
-    return true;
+    return false;
 }
 
 pub fn newXdgToplevel(
@@ -263,15 +290,21 @@ pub fn viewAt(self: *Compositor, lx: f64, ly: f64) ?ViewAtResult {
 
         var it: ?*wlr.SceneTree = n.parent;
         while (it) |p| : (it = p.node.parent) {
-            if (@as(?*Toplevel, @ptrCast(@alignCast(p.node.data)))) |toplevel| {
-                const buffer = wlr.SceneBuffer.fromNode(n);
-                const surface = wlr.SceneSurface.tryFromBuffer(buffer) orelse return null;
-                return .{
-                    .sx = sx,
-                    .sy = sy,
-                    .toplevel = toplevel,
-                    .surface = surface,
-                };
+            if (p.node.data) |data| {
+                // Verify this is actually a Toplevel (not a popup's xdg surface etc.)
+                var toplev_it = self.toplevels.iterator(.forward);
+                while (toplev_it.next()) |t| {
+                    if (@as(*anyopaque, @ptrCast(t)) == data) {
+                        const buffer = wlr.SceneBuffer.fromNode(n);
+                        const surface = wlr.SceneSurface.tryFromBuffer(buffer) orelse return null;
+                        return .{
+                            .sx = sx,
+                            .sy = sy,
+                            .toplevel = t,
+                            .surface = surface,
+                        };
+                    }
+                }
             }
         }
     }
@@ -351,5 +384,6 @@ pub fn deinit(self: *Compositor) void {
 
     self.backend.destroy();
     self.shell.destroy();
+    self.layout_mgr.destroy();
     self.server.destroy();
 }

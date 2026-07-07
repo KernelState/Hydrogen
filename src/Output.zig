@@ -18,7 +18,7 @@ const log = std.log.scoped(.output);
 pub fn create(
     comp: *Compositor,
     data: *wlr.Output,
-) !void {
+) !*Output {
     if (!data.initRender(comp.wlr_allocator, comp.renderer)) {
         return error.RendererInitError;
     }
@@ -28,6 +28,8 @@ pub fn create(
     const mode = data.preferredMode();
     if (mode) |m| {
         state.setMode(m);
+    } else {
+        state.setCustomMode(1280, 720, 0);
     }
 
     if (!data.commitState(&state)) {
@@ -35,7 +37,8 @@ pub fn create(
     }
 
     const loutput = try comp.output_layout.addAuto(data);
-    const soutput = try comp.scene.createSceneOutput(data);
+    const soutput = comp.scene.getSceneOutput(data) orelse
+        try comp.scene.createSceneOutput(data);
     comp.scene_output_layout.addOutput(loutput, soutput);
 
     var self = try comp.gpa.create(Output);
@@ -44,9 +47,13 @@ pub fn create(
         .comp = comp,
     };
 
+    _ = try comp.layout_mgr.addScreen(self);
+
     data.events.frame.add(&self.frame);
     data.events.request_state.add(&self.request_state);
     data.events.destroy.add(&self.destroy);
+
+    return self;
 }
 
 pub fn onFrame(
@@ -88,6 +95,6 @@ pub fn deinit(self: *Output) void {
     self.frame.link.remove();
     self.request_state.link.remove();
     self.destroy.link.remove();
-
+    self.comp.layout_mgr.removeScreen(self);
     self.comp.gpa.destroy(self);
 }

@@ -47,19 +47,21 @@ pub fn onCommit(
 ) void {
     const self: *Toplevel = @fieldParentPtr("commit", listener);
     if (self.toplevel.base.initial_commit) {
-        _ = self.toplevel.setSize(0, 0);
+        _ = self.toplevel.setSize(self.toplevel.base.geometry.width, self.toplevel.base.geometry.height);
     }
 }
 
 pub fn onMap(listener: *wl.Listener(void)) void {
     const self: *Toplevel = @fieldParentPtr("map", listener);
     self.comp.toplevels.prepend(self);
+    self.comp.layout_mgr.doMap(self);
     self.comp.focusView(self);
 }
 
 pub fn onUnmap(listener: *wl.Listener(void)) void {
     const self: *Toplevel = @fieldParentPtr("unmap", listener);
     self.link.remove();
+    self.comp.layout_mgr.doUnmap(self);
 }
 
 pub fn onDestroy(listener: *wl.Listener(void)) void {
@@ -85,6 +87,7 @@ pub fn onRequestMove(
     self.comp.grab_x = self.comp.cursor.x - @as(f64, @floatFromInt(self.x));
     self.comp.grab_y = self.comp.cursor.y - @as(f64, @floatFromInt(self.y));
     self.comp.grab_event = .{ .move = event.* };
+    self.comp.layout_mgr.liftWindow(self);
 }
 
 pub fn onRequestResize(
@@ -105,10 +108,16 @@ pub fn onRequestResize(
         .x = self.x,
         .y = self.y
     };
-    log.debug("{any}", .{event.edges});
 }
 
 pub fn syncResize(self: *Toplevel) void {
+    if (self.comp.layout_mgr.workspaceForView(self)) |ws_idx| {
+        if (self.comp.layout_mgr.getEffectiveMode(ws_idx) == .tiling) {
+            self.comp.layout_mgr.arrange(ws_idx);
+            return;
+        }
+    }
+
     const ev = self.comp.grab_event.?.resize;
     const c = self.comp.cursor;
     const box = self.comp.grab_box;
@@ -135,14 +144,14 @@ pub fn syncResize(self: *Toplevel) void {
     const mh = self.toplevel.current.min_height;
     const new_width = @as(i32, @intFromFloat(@max(w+dw, mw)));
     const new_height = @as(i32, @intFromFloat(@max(h+dh, mh)));
-    self.commitState();
+    self.comp.layout_mgr.doMove(self, self.x, self.y);
     _ = self.toplevel.setSize(new_width, new_height);
 }
 
 pub fn syncMove(self: *Toplevel) void {
     self.x = @as(i32, @intFromFloat(self.comp.cursor.x - self.comp.grab_x));
     self.y = @as(i32, @intFromFloat(self.comp.cursor.y - self.comp.grab_y));
-    self.commitState();
+    self.comp.layout_mgr.doMove(self, self.x, self.y);
 }
 
 pub fn commitState(self: *Toplevel) void {
