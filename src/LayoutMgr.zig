@@ -10,6 +10,7 @@ workspaces: [10]Workspace,
 screens: std.ArrayList(Screen) = .empty,
 ex_zone: std.ArrayList(ExZone) = .empty,
 allocator: std.mem.Allocator,
+config: Config,
 current_screen: ?usize,
 default_mode: Mode = .tiling,
 drag_win: ?*Window = null,
@@ -25,6 +26,10 @@ pub const Mode = enum {
     monowindow,
 };
 
+pub const Config = struct {
+    padding_in: i32 = 6,
+    padding_out: i32 = 10,
+};
 
 pub const SplitDir = enum {
     horizontal,
@@ -42,20 +47,52 @@ pub fn chooseSplitDir(w: i32, h: i32) SplitDir {
     return if (v_diff < h_diff) .vertical else .horizontal;
 }
 
-pub fn splitArea(area: Rect, dir: SplitDir) struct { Rect, Rect } {
+pub fn processWin(self: *LayoutMgr, rect: Rect) Rect {
+    const p = self.config.padding_in;
+    return .{
+        .x = rect.x + p,
+        .y = rect.y + p,
+        .width = rect.width - (p*2),
+        .height = rect.height - (p*2),
+    };
+}
+
+pub fn splitArea(self: *LayoutMgr, area: Rect, dir: SplitDir) struct { Rect, Rect } {
+    const p = @divTrunc(self.config.padding_out, 2);
+    const p2 = self.config.padding_out;
     switch (dir) {
         .horizontal => {
             const half_w = @divTrunc(area.width, 2);
             return .{
-                Rect{ .x = area.x, .y = area.y, .width = half_w, .height = area.height },
-                Rect{ .x = area.x + half_w, .y = area.y, .width = area.width - half_w, .height = area.height },
+                Rect{
+                    .x = area.x,
+                    .y = area.y,
+                    .width = half_w - p,
+                    .height = area.height,
+                },
+                Rect{
+                    .x = area.x + half_w + p,
+                    .y = area.y,
+                    .width = area.width - half_w - p2,
+                    .height = area.height,
+                },
             };
         },
         .vertical => {
             const half_h = @divTrunc(area.height, 2);
             return .{
-                Rect{ .x = area.x, .y = area.y, .width = area.width, .height = half_h },
-                Rect{ .x = area.x, .y = area.y + half_h, .width = area.width, .height = area.height - half_h },
+                Rect{
+                    .x = area.x,
+                    .y = area.y,
+                    .width = area.width,
+                    .height = half_h - p
+                },
+                Rect{
+                    .x = area.x,
+                    .y = area.y + half_h + p,
+                    .width = area.width,
+                    .height = area.height - half_h - p2,
+                },
             };
         },
     }
@@ -80,7 +117,7 @@ pub const Rect = struct {
 const BspNode = struct {
     parent: ?*BspNode,
     /// This is either a doubly forward only linked list or a single window
-    /// to represent the base unit. dir is just metadata for the drawer to know
+    /// to represent the base unit. `dir` is just metadata for the drawer to know
     /// if it's horizontal or vertical.
     data: union(enum) {
         leaf: *Window,
@@ -167,12 +204,13 @@ pub const ExZone = struct {
     size: i32 = 0,
 };
 
-pub fn create(comp: *Compositor) LayoutMgr {
+pub fn create(comp: *Compositor, config: Config) LayoutMgr {
     return .{
         .comp = comp,
         .allocator = comp.gpa,
         .workspaces = undefined,
         .current_screen = null,
+        .config = config,
     };
 }
 
@@ -198,11 +236,11 @@ pub fn getScreenWithWorkspace(self: *LayoutMgr, workspace: usize) ?*Screen {
 fn arrangeNode(self: *LayoutMgr, node: *BspNode, area: Rect) void {
     switch (node.data) {
         .leaf => |win| {
-            win.rect = area;
+            win.rect = self.processWin(area);
             win.commit(false);
         },
         .split => |s| {
-            const children = splitArea(area, s.dir);
+            const children = self.splitArea(area, s.dir);
             self.arrangeNode(s.first, children[0]);
             self.arrangeNode(s.last, children[1]);
         },
@@ -493,19 +531,20 @@ pub fn usableArea(self: *LayoutMgr, screen_idx: usize) Rect {
     self.comp.output_layout.getBox(self.screens.items[screen_idx].output.output, &box);
     var area = Rect{ .x = box.x, .y = box.y, .width = box.width, .height = box.height };
     for (self.ex_zone.items) |zone| {
+        const s = zone.size+self.config.padding_out;
         if (zone.anchor_top) {
-            area.y += zone.size;
-            area.height -= zone.size;
+            area.y += s;
+            area.height -= s;
         }
         if (zone.anchor_bottom) {
-            area.height -= zone.size;
+            area.height -= s;
         }
         if (zone.anchor_left and !zone.anchor_right) {
-            area.x += zone.size;
-            area.width -= zone.size;
+            area.x += s;
+            area.width -= s;
         }
         if (zone.anchor_right and !zone.anchor_left) {
-            area.width -= zone.size;
+            area.width -= s;
         }
     }
     return area;

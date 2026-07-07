@@ -104,7 +104,7 @@ pub fn init(self: *Compositor, gpa: std.mem.Allocator, io: std.Io) !void {
     self.cursor.events.frame.add(&self.cursor_frame);
 
     self.shell = try Shell.create(self);
-    self.layout_mgr = LayoutMgr.create(self);
+    self.layout_mgr = LayoutMgr.create(self, .{});
     self.layout_mgr.initWorkspaces();
     self.layout_mgr.ex_zone.append(gpa, .{
         .anchor_top = true,
